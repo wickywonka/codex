@@ -1,0 +1,53 @@
+name: fork-windows-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (branch/tag/commit)
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Build Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: codex-rs
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@1.93.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build release binaries
+        run: |
+          cargo build --release --target x86_64-pc-windows-msvc \
+            --bin codex \
+            --bin codex-responses-api-proxy \
+            --bin codex-windows-sandbox-setup \
+            --bin codex-command-runner
+
+      - name: Stage artifacts
+        run: |
+          dest="dist/x86_64-pc-windows-msvc"
+          mkdir -p "$dest"
+          cp target/x86_64-pc-windows-msvc/release/codex.exe "$dest/"
+          cp target/x86_64-pc-windows-msvc/release/codex-responses-api-proxy.exe "$dest/"
+          cp target/x86_64-pc-windows-msvc/release/codex-windows-sandbox-setup.exe "$dest/"
+          cp target/x86_64-pc-windows-msvc/release/codex-command-runner.exe "$dest/"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: codex-windows-x64
+          path: codex-rs/dist/x86_64-pc-windows-msvc/*
