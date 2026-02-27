@@ -395,6 +395,9 @@ pub struct Config {
     /// Ordered list of directories to search for Node modules in `js_repl`.
     pub js_repl_node_module_dirs: Vec<PathBuf>,
 
+    /// Optional absolute path to preferred default shell executable.
+    pub shell_path: Option<PathBuf>,
+
     /// Optional absolute path to patched zsh used by zsh-exec-bridge-backed shell execution.
     pub zsh_path: Option<PathBuf>,
 
@@ -1121,6 +1124,9 @@ pub struct ConfigToml {
 
     /// Ordered list of directories to search for Node modules in `js_repl`.
     pub js_repl_node_module_dirs: Option<Vec<AbsolutePathBuf>>,
+
+    /// Optional absolute path to preferred default shell executable.
+    pub shell_path: Option<AbsolutePathBuf>,
 
     /// Optional absolute path to patched zsh used by zsh-exec-bridge-backed shell execution.
     pub zsh_path: Option<AbsolutePathBuf>,
@@ -1986,6 +1992,10 @@ impl Config {
                     .map(|dirs| dirs.into_iter().map(Into::into).collect::<Vec<PathBuf>>())
             })
             .unwrap_or_default();
+        let shell_path = config_profile
+            .shell_path
+            .map(Into::into)
+            .or(cfg.shell_path.map(Into::into));
         let zsh_path = zsh_path_override
             .or(config_profile.zsh_path.map(Into::into))
             .or(cfg.zsh_path.map(Into::into));
@@ -2143,6 +2153,7 @@ impl Config {
             main_execve_wrapper_exe,
             js_repl_node_path,
             js_repl_node_module_dirs,
+            shell_path,
             zsh_path,
 
             hide_agent_reasoning: cfg.hide_agent_reasoning.unwrap_or(false),
@@ -3266,6 +3277,57 @@ profile = "project"
         ));
         assert!(config.did_user_set_custom_approval_policy_or_sandbox_mode);
 
+        Ok(())
+    }
+
+    #[test]
+    fn shell_path_loaded_from_global_config() -> std::io::Result<()> {
+        let codex_home = TempDir::new()?;
+        let shell_path = test_absolute_path("/git/bin/bash.exe");
+        let expected_shell_path: PathBuf = shell_path.clone().into();
+        let cfg = ConfigToml {
+            shell_path: Some(shell_path),
+            ..Default::default()
+        };
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides::default(),
+            codex_home.path().to_path_buf(),
+        )?;
+
+        assert_eq!(config.shell_path, Some(expected_shell_path));
+        Ok(())
+    }
+
+    #[test]
+    fn profile_shell_path_overrides_global_shell_path() -> std::io::Result<()> {
+        let codex_home = TempDir::new()?;
+        let mut profiles = HashMap::new();
+        let global_shell_path = test_absolute_path("/global/bin/bash.exe");
+        let profile_shell_path = test_absolute_path("/profile/bin/bash.exe");
+        let expected_profile_shell_path: PathBuf = profile_shell_path.clone().into();
+        profiles.insert(
+            "work".to_string(),
+            ConfigProfile {
+                shell_path: Some(profile_shell_path),
+                ..Default::default()
+            },
+        );
+        let cfg = ConfigToml {
+            profiles,
+            profile: Some("work".to_string()),
+            shell_path: Some(global_shell_path),
+            ..Default::default()
+        };
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides::default(),
+            codex_home.path().to_path_buf(),
+        )?;
+
+        assert_eq!(config.shell_path, Some(expected_profile_shell_path));
         Ok(())
     }
 
@@ -4841,6 +4903,7 @@ model_verbosity = "high"
                 main_execve_wrapper_exe: None,
                 js_repl_node_path: None,
                 js_repl_node_module_dirs: Vec::new(),
+                shell_path: None,
                 zsh_path: None,
                 hide_agent_reasoning: false,
                 show_raw_agent_reasoning: false,
@@ -4968,6 +5031,7 @@ model_verbosity = "high"
             main_execve_wrapper_exe: None,
             js_repl_node_path: None,
             js_repl_node_module_dirs: Vec::new(),
+            shell_path: None,
             zsh_path: None,
             hide_agent_reasoning: false,
             show_raw_agent_reasoning: false,
@@ -5093,6 +5157,7 @@ model_verbosity = "high"
             main_execve_wrapper_exe: None,
             js_repl_node_path: None,
             js_repl_node_module_dirs: Vec::new(),
+            shell_path: None,
             zsh_path: None,
             hide_agent_reasoning: false,
             show_raw_agent_reasoning: false,
@@ -5204,6 +5269,7 @@ model_verbosity = "high"
             main_execve_wrapper_exe: None,
             js_repl_node_path: None,
             js_repl_node_module_dirs: Vec::new(),
+            shell_path: None,
             zsh_path: None,
             hide_agent_reasoning: false,
             show_raw_agent_reasoning: false,

@@ -1340,6 +1340,13 @@ impl Session {
                     zsh_path.display()
                 )
             })?
+        } else if let Some(shell_path) = config.shell_path.as_ref() {
+            shell::shell_from_path(shell_path).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "configured `shell_path` `{}` is not usable; set `shell_path` to a valid shell executable",
+                    shell_path.display()
+                )
+            })?
         } else {
             shell::default_user_shell()
         };
@@ -8406,6 +8413,84 @@ mod tests {
         };
         let msg = format!("{err:#}");
         assert!(msg.contains("zsh fork feature enabled, but `zsh_path` is not configured"));
+    }
+
+    #[tokio::test]
+    async fn session_new_fails_when_configured_shell_path_is_not_usable() {
+        let codex_home = tempfile::tempdir().expect("create temp dir");
+        let mut config = build_test_config(codex_home.path()).await;
+        config.shell_path = Some(codex_home.path().join("not-a-shell"));
+        let config = Arc::new(config);
+
+        let auth_manager =
+            AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
+        let models_manager = Arc::new(ModelsManager::new(
+            config.codex_home.clone(),
+            auth_manager.clone(),
+            None,
+            CollaborationModesConfig::default(),
+        ));
+        let model = ModelsManager::get_model_offline_for_tests(config.model.as_deref());
+        let model_info =
+            ModelsManager::construct_model_info_offline_for_tests(model.as_str(), &config);
+        let collaboration_mode = CollaborationMode {
+            mode: ModeKind::Default,
+            settings: Settings {
+                model,
+                reasoning_effort: config.model_reasoning_effort,
+                developer_instructions: None,
+            },
+        };
+        let session_configuration = SessionConfiguration {
+            provider: config.model_provider.clone(),
+            collaboration_mode,
+            model_reasoning_summary: config.model_reasoning_summary,
+            developer_instructions: config.developer_instructions.clone(),
+            user_instructions: config.user_instructions.clone(),
+            personality: config.personality,
+            base_instructions: config
+                .base_instructions
+                .clone()
+                .unwrap_or_else(|| model_info.get_model_instructions(config.personality)),
+            compact_prompt: config.compact_prompt.clone(),
+            approval_policy: config.permissions.approval_policy.clone(),
+            sandbox_policy: config.permissions.sandbox_policy.clone(),
+            windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
+            cwd: config.cwd.clone(),
+            codex_home: config.codex_home.clone(),
+            thread_name: None,
+            original_config_do_not_use: Arc::clone(&config),
+            metrics_service_name: None,
+            app_server_client_name: None,
+            session_source: SessionSource::Exec,
+            dynamic_tools: Vec::new(),
+            persist_extended_history: false,
+        };
+
+        let (tx_event, _rx_event) = async_channel::unbounded();
+        let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
+        let result = Session::new(
+            session_configuration,
+            Arc::clone(&config),
+            auth_manager,
+            models_manager,
+            ExecPolicyManager::default(),
+            tx_event,
+            agent_status_tx,
+            InitialHistory::New,
+            SessionSource::Exec,
+            Arc::new(SkillsManager::new(config.codex_home.clone())),
+            Arc::new(FileWatcher::noop()),
+            AgentControl::default(),
+        )
+        .await;
+
+        let err = match result {
+            Ok(_) => panic!("expected startup to fail"),
+            Err(err) => err,
+        };
+        let msg = format!("{err:#}");
+        assert!(msg.contains("configured `shell_path`"));
     }
 
     // todo: use online model info

@@ -230,9 +230,11 @@ fn ultimate_fallback_shell() -> Shell {
 }
 
 pub fn get_shell_by_model_provided_path(shell_path: &PathBuf) -> Shell {
-    detect_shell_type(shell_path)
-        .and_then(|shell_type| get_shell(shell_type, Some(shell_path)))
-        .unwrap_or(ultimate_fallback_shell())
+    shell_from_path(shell_path).unwrap_or(ultimate_fallback_shell())
+}
+
+pub fn shell_from_path(shell_path: &PathBuf) -> Option<Shell> {
+    detect_shell_type(shell_path).and_then(|shell_type| get_shell(shell_type, Some(shell_path)))
 }
 
 pub fn get_shell(shell_type: ShellType, path: Option<&PathBuf>) -> Option<Shell> {
