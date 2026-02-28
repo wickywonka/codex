@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::RequestId;
 use crate::protocol::common::AuthMode;
 use codex_experimental_api_macros::ExperimentalApi;
 use codex_protocol::account::PlanType;
@@ -812,8 +813,8 @@ impl From<CoreNetworkApprovalContext> for NetworkApprovalContext {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct AdditionalFileSystemPermissions {
-    pub read: Option<Vec<PathBuf>>,
-    pub write: Option<Vec<PathBuf>>,
+    pub read: Option<Vec<AbsolutePathBuf>>,
+    pub write: Option<Vec<AbsolutePathBuf>>,
 }
 
 impl From<CoreFileSystemPermissions> for AdditionalFileSystemPermissions {
@@ -3748,6 +3749,14 @@ pub struct FileChangeOutputDeltaNotification {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ServerRequestResolvedNotification {
+    pub thread_id: String,
+    pub request_id: RequestId,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct McpToolCallProgressNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -4168,6 +4177,37 @@ mod tests {
             "/readable"
         };
         AbsolutePathBuf::from_absolute_path(path).expect("path must be absolute")
+    }
+
+    #[test]
+    fn command_execution_request_approval_rejects_relative_additional_permission_paths() {
+        let err = serde_json::from_value::<CommandExecutionRequestApprovalParams>(json!({
+            "threadId": "thr_123",
+            "turnId": "turn_123",
+            "itemId": "call_123",
+            "command": "cat file",
+            "cwd": "/tmp",
+            "commandActions": null,
+            "reason": null,
+            "networkApprovalContext": null,
+            "additionalPermissions": {
+                "network": null,
+                "fileSystem": {
+                    "read": ["relative/path"],
+                    "write": null
+                },
+                "macos": null
+            },
+            "proposedExecpolicyAmendment": null,
+            "proposedNetworkPolicyAmendments": null,
+            "availableDecisions": null
+        }))
+        .expect_err("relative additional permission paths should fail");
+        assert!(
+            err.to_string()
+                .contains("AbsolutePathBuf deserialized without a base path"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

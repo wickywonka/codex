@@ -2501,6 +2501,8 @@ persistence = "none"
 
         let memories = r#"
 [memories]
+generate_memories = false
+use_memories = false
 max_raw_memories_for_global = 512
 max_unused_days = 21
 max_rollout_age_days = 42
@@ -2513,6 +2515,8 @@ phase_2_model = "gpt-5"
             toml::from_str::<ConfigToml>(memories).expect("TOML deserialization should succeed");
         assert_eq!(
             Some(MemoriesToml {
+                generate_memories: Some(false),
+                use_memories: Some(false),
                 max_raw_memories_for_global: Some(512),
                 max_unused_days: Some(21),
                 max_rollout_age_days: Some(42),
@@ -2533,6 +2537,8 @@ phase_2_model = "gpt-5"
         assert_eq!(
             config.memories,
             MemoriesConfig {
+                generate_memories: false,
+                use_memories: false,
                 max_raw_memories_for_global: 512,
                 max_unused_days: 21,
                 max_rollout_age_days: 42,
